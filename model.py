@@ -158,7 +158,7 @@ class Identity(nn.Module):
 
 class PCRNet(nn.Module):
 	def __init__(self, args):
-		super(DCP, self).__init__()
+		super(PCRNet, self).__init__()
 		self.emb_dims = args.emb_dims
 		self.cycle = args.cycle
 		self.iterations = args.iterations

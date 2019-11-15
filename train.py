@@ -42,7 +42,7 @@ def _init_(args):
 		os.makedirs('checkpoints/' + args.exp_name)
 	if not os.path.exists('checkpoints/' + args.exp_name + '/' + 'models'):
 		os.makedirs('checkpoints/' + args.exp_name + '/' + 'models')
-	os.system('cp main.py checkpoints' + '/' + args.exp_name + '/' + 'main.py.backup')
+	os.system('cp train.py checkpoints' + '/' + args.exp_name + '/' + 'train.py.backup')
 	os.system('cp model.py checkpoints' + '/' + args.exp_name + '/' + 'model.py.backup')
 	os.system('cp data.py checkpoints' + '/' + args.exp_name + '/' + 'data.py.backup')
 
@@ -609,7 +609,7 @@ def main():
 	else:
 		raise Exception("not implemented")
 
-	if args.model == 'dcp':
+	if args.model == 'pcrnet':
 		net = PCRNet(args).cuda()
 		if args.eval:
 			if args.model_path is '':
