@@ -1,0 +1,9 @@
+setup.py
+PyTorch_EMD.egg-info/PKG-INFO
+PyTorch_EMD.egg-info/SOURCES.txt
+PyTorch_EMD.egg-info/dependency_links.txt
+PyTorch_EMD.egg-info/top_level.txt
+pkg/layer/__init__.py
+pkg/layer/emd_loss_layer.py
+pkg/src/emd.cpp
+pkg/src/cuda/emd.cu
