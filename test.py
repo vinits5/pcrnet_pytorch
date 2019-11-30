@@ -12,6 +12,7 @@ import torch.nn.functional as F
 from model import PCRNet
 from util import transform_point_cloud, npmat2euler
 import numpy as np
+import helper
 
 # Use this function to read the data.
 def read_data():
@@ -19,19 +20,28 @@ def read_data():
 		# source:		Torch tensor on CPU [Nx3]
 		# template:		Torch tensor on CPU [Nx3]
 		# rotation_ab:	Torch tensor on CPU [Nx3]
-	pass
+	template = helper.loadData('train_data')
+	template = template[0,0:1024,:].reshape(1,-1,3)
+	poses = np.array([[0, 0.5, 0, 0*(np.pi/180), 40*(np.pi/180), 0*(np.pi/180)]])
+	source = helper.apply_transformation(template, poses)
+	return torch.from_numpy(source), torch.from_numpy(template)
 
 def test_one_pair(args, net):
-	source, template, rotation_ab, translation_ab = read_data()
+	source, template = read_data()
 	net.eval()
 	src = source.to(args.device)
 	target = template.to(args.device)
+	src = src.permute(0,2,1)
+	target = target.permute(0,2,1)
 	batch_size = src.size(0)
 	rotation_ab_pred, translation_ab_pred, rotation_ba_pred, translation_ba_pred = net(src, target)	
 	transformed_src = transform_point_cloud(src, rotation_ab_pred, translation_ab_pred)
 	transformed_target = transform_point_cloud(target, rotation_ba_pred, translation_ba_pred)
 
-	return source, template, transformed_src.cpu().numpy(), rotations_ab_pred, translation_ab_pred
+	transformed_src = transformed_src.permute(0,2,1)
+	print(rotation_ab_pred, translation_ab_pred)
+
+	return source.numpy(), template.numpy(), transformed_src.cpu().detach().numpy(), rotation_ab_pred, translation_ab_pred
 
 def main():
 	parser = argparse.ArgumentParser(description='Point Cloud Registration')
@@ -94,13 +104,13 @@ def main():
 						help='dataset to use')
 	parser.add_argument('--factor', type=float, default=4, metavar='N',
 						help='Divided factor for rotations')
-	parser.add_argument('--model_path', type=str, default='', metavar='N',
+	parser.add_argument('--model_path', type=str, default='./checkpoints/pcrnet_1/models/model.best.t7', metavar='N',
 						help='Pretrained model path')
 
 	args = parser.parse_args()
 
 	use_cuda = torch.cuda.is_available()
-	args.cuda = torch.device("cuda" if use_cuda else "cpu")
+	args.device = torch.device("cuda" if use_cuda else "cpu")
 
 	torch.backends.cudnn.deterministic = True
 	torch.manual_seed(args.seed)
@@ -115,9 +125,10 @@ def main():
 		raise Exception('Not implemented')
 	
 	source, template, transformed_src, _, _ = test_one_pair(args, net)
+	print(source.shape, template.shape, transformed_src.shape)
 
 	import helper
-	helper.display_three_clouds(template, source, transformed_src, 'Results')
+	helper.display_three_clouds(template[0], source[0], transformed_src[0], 'Results')
 
 	print('FINISH')
 
