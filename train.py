@@ -18,6 +18,7 @@ import numpy as np
 from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
+from chamfer_distance import ChamferDistance
 
 
 # Part of the code is referred from: https://github.com/floodsung/LearningToCompare_FSL
@@ -80,7 +81,7 @@ def test_one_epoch(args, net, test_loader):
 
 		batch_size = src.size(0)
 		num_examples += batch_size
-		rotation_ab_pred, translation_ab_pred, rotation_ba_pred, translation_ba_pred = net(src, target)
+		rotation_ab_pred, translation_ab_pred, rotation_ba_pred, translation_ba_pred, loss = net(src, target)
 
 		## save rotation and translation
 		rotations_ab.append(rotation_ab.detach().cpu().numpy())
@@ -100,17 +101,9 @@ def test_one_epoch(args, net, test_loader):
 		transformed_target = transform_point_cloud(target, rotation_ba_pred, translation_ba_pred)
 
 		###########################
-		identity = torch.eye(3).cuda().unsqueeze(0).repeat(batch_size, 1, 1)
-		loss = F.mse_loss(torch.matmul(rotation_ab_pred.transpose(2, 1), rotation_ab), identity) \
-			   + F.mse_loss(translation_ab_pred, translation_ab)
-		if args.cycle:
-			rotation_loss = F.mse_loss(torch.matmul(rotation_ba_pred, rotation_ab_pred), identity.clone())
-			translation_loss = torch.mean((torch.matmul(rotation_ba_pred.transpose(2, 1),
-														translation_ab_pred.view(batch_size, 3, 1)).view(batch_size, 3)
-										   + translation_ba_pred) ** 2, dim=[0, 1])
-			cycle_loss = rotation_loss + translation_loss
-
-			loss = loss + cycle_loss * 0.1
+		#identity = torch.eye(3).cuda().unsqueeze(0).repeat(batch_size, 1, 1)
+		#loss = F.mse_loss(torch.matmul(rotation_ab_pred.transpose(2, 1), rotation_ab), identity) \
+		#	   + F.mse_loss(translation_ab_pred, translation_ab)
 
 		total_loss += loss.item() * batch_size
 
@@ -168,6 +161,11 @@ def train_one_epoch(args, net, train_loader, opt):
 	eulers_ba = []
 
 	for src, target, rotation_ab, translation_ab, rotation_ba, translation_ba, euler_ab, euler_ba in tqdm(train_loader):
+		# src -> pointcloud1
+		# target -> pointcloud2
+		# pointcloud2 = rotation_ab*pointcloud1 + translation_ab
+		# target = rotation_ab*src +_translation_ab
+
 		src = src.cuda()
 		target = target.cuda()
 		rotation_ab = rotation_ab.cuda()
@@ -178,7 +176,7 @@ def train_one_epoch(args, net, train_loader, opt):
 		batch_size = src.size(0)
 		opt.zero_grad()
 		num_examples += batch_size
-		rotation_ab_pred, translation_ab_pred, rotation_ba_pred, translation_ba_pred = net(src, target)
+		rotation_ab_pred, translation_ab_pred, rotation_ba_pred, translation_ba_pred, loss = net(src, target)
 
 		## save rotation and translation
 		rotations_ab.append(rotation_ab.detach().cpu().numpy())
@@ -197,17 +195,10 @@ def train_one_epoch(args, net, train_loader, opt):
 
 		transformed_target = transform_point_cloud(target, rotation_ba_pred, translation_ba_pred)
 		###########################
-		identity = torch.eye(3).cuda().unsqueeze(0).repeat(batch_size, 1, 1)
-		loss = F.mse_loss(torch.matmul(rotation_ab_pred.transpose(2, 1), rotation_ab), identity) \
-			   + F.mse_loss(translation_ab_pred, translation_ab)
-		if args.cycle:
-			rotation_loss = F.mse_loss(torch.matmul(rotation_ba_pred, rotation_ab_pred), identity.clone())
-			translation_loss = torch.mean((torch.matmul(rotation_ba_pred.transpose(2, 1),
-														translation_ab_pred.view(batch_size, 3, 1)).view(batch_size, 3)
-										   + translation_ba_pred) ** 2, dim=[0, 1])
-			cycle_loss = rotation_loss + translation_loss
-
-			loss = loss + cycle_loss * 0.1
+		#identity = torch.eye(3).cuda().unsqueeze(0).repeat(batch_size, 1, 1)
+		#loss = F.mse_loss(torch.matmul(rotation_ab_pred.transpose(2, 1), rotation_ab), identity) \
+		#	   + F.mse_loss(translation_ab_pred, translation_ab)
+		
 
 		loss.backward()
 		opt.step()
@@ -436,6 +427,7 @@ def train(args, net, train_loader, test_loader, boardio, textio):
 					  % (epoch, best_test_loss, best_test_mse_ba, best_test_rmse_ba, best_test_mae_ba,
 						 best_test_r_mse_ba, best_test_r_rmse_ba,
 						 best_test_r_mae_ba, best_test_t_mse_ba, best_test_t_rmse_ba, best_test_t_mae_ba))
+		textio.cprint('\n')
 
 		boardio.add_scalar('A->B/train/loss', train_loss, epoch)
 		boardio.add_scalar('A->B/train/MSE', train_mse_ab, epoch)
@@ -516,7 +508,7 @@ def main():
 	parser = argparse.ArgumentParser(description='Point Cloud Registration')
 	
 	# Settings for network.
-	parser.add_argument('--exp_name', type=str, default='exp', metavar='N',
+	parser.add_argument('--exp_name', type=str, default='pcrnet_chamfer', metavar='N',
 						help='Name of the experiment')
 	parser.add_argument('--model', type=str, default='pcrnet', metavar='N',
 						choices=['dcp'],
@@ -530,7 +522,7 @@ def main():
 	parser.add_argument('--head', type=str, default='mlp', metavar='N',
 						choices=['mlp', 'svd', ],
 						help='Head to use, [mlp, svd]')
-	parser.add_argument('--iterations', type=int, default=1, help='[No of iterations for PCRNet]')
+	parser.add_argument('--iterations', type=int, default=8, help='[No of iterations for PCRNet]')
 	
 	# Settings for training
 	parser.add_argument('--emb_dims', type=int, default=1024, metavar='N',

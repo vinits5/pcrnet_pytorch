@@ -21,8 +21,8 @@ def read_data():
 		# template:		Torch tensor on CPU [Nx3]
 		# rotation_ab:	Torch tensor on CPU [Nx3]
 	template = helper.loadData('train_data')
-	template = template[0,0:1024,:].reshape(1,-1,3)
-	poses = np.array([[0, 0.5, 0, 0*(np.pi/180), 40*(np.pi/180), 0*(np.pi/180)]])
+	template = template[0, 0:1024,:].reshape(1,-1,3)
+	poses = np.array([[0, 0., 0, 0*(np.pi/180), 0*(np.pi/180), 0*(np.pi/180)]])
 	source = helper.apply_transformation(template, poses)
 	return torch.from_numpy(source), torch.from_numpy(template)
 
@@ -39,9 +39,10 @@ def test_one_pair(args, net):
 	transformed_target = transform_point_cloud(target, rotation_ba_pred, translation_ba_pred)
 
 	transformed_src = transformed_src.permute(0,2,1)
+	transformed_target = transformed_target.permute(0,2,1)
 	print(rotation_ab_pred, translation_ab_pred)
 
-	return source.numpy(), template.numpy(), transformed_src.cpu().detach().numpy(), rotation_ab_pred, translation_ab_pred
+	return source.numpy(), template.numpy(), transformed_target.cpu().detach().numpy(), rotation_ab_pred, translation_ab_pred
 
 def main():
 	parser = argparse.ArgumentParser(description='Point Cloud Registration')
@@ -104,7 +105,7 @@ def main():
 						help='dataset to use')
 	parser.add_argument('--factor', type=float, default=4, metavar='N',
 						help='Divided factor for rotations')
-	parser.add_argument('--model_path', type=str, default='./checkpoints/pcrnet_1/models/model.best.t7', metavar='N',
+	parser.add_argument('--model_path', type=str, default='./checkpoints/pcrnet_2/models/model.best.t7', metavar='N',
 						help='Pretrained model path')
 
 	args = parser.parse_args()

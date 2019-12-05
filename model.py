@@ -178,6 +178,7 @@ class PCRNet(nn.Module):
 			self.head = MLPHead(args=args)
 		else:
 			raise Exception('Not implemented')
+		self.chamfer = ChamferDistance()
 
 	def forward(self, *input):
 		src = input[0]
@@ -199,12 +200,18 @@ class PCRNet(nn.Module):
 
 				rotation_ab_temp, translation_ab_temp = self.head(src_embedding, tgt_embedding, src, tgt)
 				rotation_ab, translation_ab = combine_transformations(rotation_ab_temp, translation_ab_temp, rotation_ab, translation_ab)
+
+			src = transform_point_cloud(src, rotation_ab_temp, translation_ab_temp)
 		else:
 			rotation_ab, translation_ab = self.head(src_embedding, tgt_embedding, src, tgt)
+			src = transform_point_cloud(src, rotation_ab, translation_ab)
 
 		if self.cycle:
 			rotation_ba, translation_ba = self.head(tgt_embedding, src_embedding, tgt, src)
 		else:
 			rotation_ba = rotation_ab.transpose(2, 1).contiguous()
 			translation_ba = -torch.matmul(rotation_ba, translation_ab.unsqueeze(2)).squeeze(2)
-		return rotation_ab, translation_ab, rotation_ba, translation_ba
+
+		dist1, dist2 = self.chamfer(src.permute(0,2,1), tgt.permute(0,2,1))
+		loss = (torch.mean(torch.sqrt(dist1)) + torch.mean(torch.sqrt(dist2)))/2.0
+		return rotation_ab, translation_ab, rotation_ba, translation_ba, loss

@@ -62,8 +62,7 @@ def transform_point_cloud(point_cloud, rotation, translation):
 
 
 def combine_transformations(rotation, translation, rotation_prev, translation_prev):
-	return torch.matmul(rotation, rotation_prev), (torch.matmul(rotation_prev, translation_prev.unsqueeze(2)) + translation.unsqueeze(2))[:,:,0]
-
+	return torch.matmul(rotation, rotation_prev), (torch.matmul(rotation, translation_prev.unsqueeze(2)) + translation.unsqueeze(2))[:,:,0]
 
 def npmat2euler(mats, seq='zyx'):
 	eulers = []

@@ -103,8 +103,9 @@ class ModelNet40(Dataset):
                         [0, 0, 1]])
         R_ab = Rx.dot(Ry).dot(Rz)
         R_ba = R_ab.T
-        translation_ab = np.array([np.random.uniform(-0.5, 0.5), np.random.uniform(-0.5, 0.5),
-                                   np.random.uniform(-0.5, 0.5)])
+        #translation_ab = np.array([np.random.uniform(-0.5, 0.5), np.random.uniform(-0.5, 0.5),
+        #                           np.random.uniform(-0.5, 0.5)])
+        translation_ab = np.array([0.0, 0.0, 0.0])
         translation_ba = -R_ba.dot(translation_ab)
 
         pointcloud1 = pointcloud.T
