@@ -18,7 +18,6 @@ import numpy as np
 from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
-from chamfer_distance import ChamferDistance
 
 
 # Part of the code is referred from: https://github.com/floodsung/LearningToCompare_FSL
