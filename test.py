@@ -22,7 +22,7 @@ def read_data():
 		# rotation_ab:	Torch tensor on CPU [Nx3]
 	template = helper.loadData('train_data')
 	template = template[0, 0:1024,:].reshape(1,-1,3)
-	poses = np.array([[0, 0., 0, 0*(np.pi/180), 0*(np.pi/180), 0*(np.pi/180)]])
+	poses = np.array([[0, 0, 0, 30*(np.pi/180), 40*(np.pi/180), 0*(np.pi/180)]])
 	source = helper.apply_transformation(template, poses)
 	return torch.from_numpy(source), torch.from_numpy(template)
 
@@ -34,7 +34,7 @@ def test_one_pair(args, net):
 	src = src.permute(0,2,1)
 	target = target.permute(0,2,1)
 	batch_size = src.size(0)
-	rotation_ab_pred, translation_ab_pred, rotation_ba_pred, translation_ba_pred = net(src, target)	
+	rotation_ab_pred, translation_ab_pred, rotation_ba_pred, translation_ba_pred, _ = net(src, target)	
 	transformed_src = transform_point_cloud(src, rotation_ab_pred, translation_ab_pred)
 	transformed_target = transform_point_cloud(target, rotation_ba_pred, translation_ba_pred)
 
@@ -62,7 +62,7 @@ def main():
 	parser.add_argument('--head', type=str, default='mlp', metavar='N',
 						choices=['mlp', 'svd', ],
 						help='Head to use, [mlp, svd]')
-	parser.add_argument('--iterations', type=int, default=1, help='[No of iterations for PCRNet]')
+	parser.add_argument('--iterations', type=int, default=8, help='[No of iterations for PCRNet]')
 	
 	# Settings for training
 	parser.add_argument('--emb_dims', type=int, default=1024, metavar='N',
@@ -105,7 +105,7 @@ def main():
 						help='dataset to use')
 	parser.add_argument('--factor', type=float, default=4, metavar='N',
 						help='Divided factor for rotations')
-	parser.add_argument('--model_path', type=str, default='./checkpoints/pcrnet_2/models/model.best.t7', metavar='N',
+	parser.add_argument('--model_path', type=str, default='./pretrained/model.best.t7', metavar='N',
 						help='Pretrained model path')
 
 	args = parser.parse_args()

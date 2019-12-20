@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-
 from __future__ import print_function
 import os
 import gc
@@ -11,7 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.optim.lr_scheduler import MultiStepLR
-from data import ModelNet40
+from data import ModelNet40, pcr_single, pcr
 from model import PCRNet
 from util import transform_point_cloud, npmat2euler
 import numpy as np
@@ -100,9 +99,10 @@ def test_one_epoch(args, net, test_loader):
 		transformed_target = transform_point_cloud(target, rotation_ba_pred, translation_ba_pred)
 
 		###########################
-		#identity = torch.eye(3).cuda().unsqueeze(0).repeat(batch_size, 1, 1)
-		#loss = F.mse_loss(torch.matmul(rotation_ab_pred.transpose(2, 1), rotation_ab), identity) \
-		#	   + F.mse_loss(translation_ab_pred, translation_ab)
+		if args.loss == 'frobenius_norm':
+			identity = torch.eye(3).cuda().unsqueeze(0).repeat(batch_size, 1, 1)
+			loss = F.mse_loss(torch.matmul(rotation_ab_pred.transpose(2, 1), rotation_ab), identity) \
+				   + F.mse_loss(translation_ab_pred, translation_ab)
 
 		total_loss += loss.item() * batch_size
 
@@ -193,10 +193,12 @@ def train_one_epoch(args, net, train_loader, opt):
 		transformed_src = transform_point_cloud(src, rotation_ab_pred, translation_ab_pred)
 
 		transformed_target = transform_point_cloud(target, rotation_ba_pred, translation_ba_pred)
+		
 		###########################
-		#identity = torch.eye(3).cuda().unsqueeze(0).repeat(batch_size, 1, 1)
-		#loss = F.mse_loss(torch.matmul(rotation_ab_pred.transpose(2, 1), rotation_ab), identity) \
-		#	   + F.mse_loss(translation_ab_pred, translation_ab)
+		if args.loss == 'frobenius_norm':
+			identity = torch.eye(3).cuda().unsqueeze(0).repeat(batch_size, 1, 1)
+			loss = F.mse_loss(torch.matmul(rotation_ab_pred.transpose(2, 1), rotation_ab), identity) \
+				   + F.mse_loss(translation_ab_pred, translation_ab)
 		
 
 		loss.backward()
@@ -279,7 +281,7 @@ def train(args, net, train_loader, test_loader, boardio, textio):
 	else:
 		print("Use Adam")
 		opt = optim.Adam(net.parameters(), lr=args.lr, weight_decay=1e-4)
-	scheduler = MultiStepLR(opt, milestones=[75, 150, 200], gamma=0.1)
+	scheduler = MultiStepLR(opt, milestones=[75, 150, 200, 300, 400], gamma=0.46)
 
 
 	best_test_loss = np.inf
@@ -507,7 +509,7 @@ def main():
 	parser = argparse.ArgumentParser(description='Point Cloud Registration')
 	
 	# Settings for network.
-	parser.add_argument('--exp_name', type=str, default='pcrnet_chamfer', metavar='N',
+	parser.add_argument('--exp_name', type=str, default='pcrnet_log', metavar='N',
 						help='Name of the experiment')
 	parser.add_argument('--model', type=str, default='pcrnet', metavar='N',
 						choices=['dcp'],
@@ -516,12 +518,13 @@ def main():
 						choices=['pointnet', 'dgcnn'],
 						help='Embedding nn to use, [pointnet, dgcnn]')
 	parser.add_argument('--pointer', type=str, default='identity', metavar='N',
-						choices=['identity', 'transformer'],
-						help='Attention-based pointer generator to use, [identity, transformer]')
+						choices=['identity'],
+						help='Attention-based pointer generator to use, [identity]')
 	parser.add_argument('--head', type=str, default='mlp', metavar='N',
-						choices=['mlp', 'svd', ],
-						help='Head to use, [mlp, svd]')
+						choices=['mlp'],
+						help='Head to use, [mlp]')
 	parser.add_argument('--iterations', type=int, default=8, help='[No of iterations for PCRNet]')
+	parser.add_argument('--loss', type=str, default='chamfer', help='[chamfer, frobenius_norm]')
 	
 	# Settings for training
 	parser.add_argument('--emb_dims', type=int, default=1024, metavar='N',
@@ -530,7 +533,7 @@ def main():
 						help='Size of batch)')
 	parser.add_argument('--test_batch_size', type=int, default=10, metavar='batch_size',
 						help='Size of batch)')
-	parser.add_argument('--epochs', type=int, default=250, metavar='N',
+	parser.add_argument('--epochs', type=int, default=500, metavar='N',
 						help='number of episode to train ')
 	parser.add_argument('--no_cuda', action='store_true', default=False,
 						help='enables CUDA training')
@@ -553,7 +556,7 @@ def main():
 	# Settings for optimizer
 	parser.add_argument('--use_sgd', action='store_true', default=False,
 						help='Use SGD')
-	parser.add_argument('--lr', type=float, default=0.001, metavar='LR',
+	parser.add_argument('--lr', type=float, default=0.0001, metavar='LR',
 						help='learning rate (default: 0.001, 0.1 if using sgd)')
 	parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
 						help='SGD momentum (default: 0.9)')
@@ -569,7 +572,7 @@ def main():
 						help='Wheter to test on unseen category')
 	parser.add_argument('--num_points', type=int, default=1024, metavar='N',
 						help='Num of points to use')
-	parser.add_argument('--dataset', type=str, default='modelnet40', choices=['modelnet40'], metavar='N',
+	parser.add_argument('--dataset', type=str, default='pcr', choices=['modelnet40', 'pcr', 'pcr_single'], metavar='N',
 						help='dataset to use')
 	parser.add_argument('--factor', type=float, default=4, metavar='N',
 						help='Divided factor for rotations')
@@ -588,13 +591,33 @@ def main():
 	textio = IOStream('checkpoints/' + args.exp_name + '/run.log')
 	textio.cprint(str(args))
 
-	if args.dataset == 'modelnet40':
+	if args.dataset == 'pcr':
+		train_loader = DataLoader(
+			pcr(num_points=args.num_points, partition='train', gaussian_noise=args.gaussian_noise,
+					   unseen=args.unseen, factor=args.factor),
+			batch_size=args.batch_size, shuffle=True, drop_last=True)
+		test_loader = DataLoader(
+			pcr(num_points=args.num_points, partition='test', gaussian_noise=args.gaussian_noise,
+					   unseen=args.unseen, factor=args.factor),
+			batch_size=args.test_batch_size, shuffle=False, drop_last=False)
+	
+	elif args.dataset == 'modelnet40':
 		train_loader = DataLoader(
 			ModelNet40(num_points=args.num_points, partition='train', gaussian_noise=args.gaussian_noise,
 					   unseen=args.unseen, factor=args.factor),
 			batch_size=args.batch_size, shuffle=True, drop_last=True)
 		test_loader = DataLoader(
 			ModelNet40(num_points=args.num_points, partition='test', gaussian_noise=args.gaussian_noise,
+					   unseen=args.unseen, factor=args.factor),
+			batch_size=args.test_batch_size, shuffle=False, drop_last=False)
+
+	elif args.dataset == 'pcr_single':
+		train_loader = DataLoader(
+			pcr_single(num_points=args.num_points, partition='train', gaussian_noise=args.gaussian_noise,
+					   unseen=args.unseen, factor=args.factor),
+			batch_size=args.batch_size, shuffle=True, drop_last=True)
+		test_loader = DataLoader(
+			pcr_single(num_points=args.num_points, partition='test', gaussian_noise=args.gaussian_noise,
 					   unseen=args.unseen, factor=args.factor),
 			batch_size=args.test_batch_size, shuffle=False, drop_last=False)
 	else:

@@ -17,74 +17,22 @@ from util import quat2mat, transform_point_cloud, combine_transformations
 from chamfer_distance import ChamferDistance
 
 
-# Part of the code is referred from: http://nlp.seas.harvard.edu/2018/04/03/attention.html#positional-encoding
-
-def clones(module, N):
-	return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
-
-def nearest_neighbor(src, dst):
-	inner = -2 * torch.matmul(src.transpose(1, 0).contiguous(), dst)  # src, dst (num_dims, num_points)
-	distances = -torch.sum(src ** 2, dim=0, keepdim=True).transpose(1, 0).contiguous() - inner - torch.sum(dst ** 2,
-																										   dim=0,
-																										   keepdim=True)
-	distances, indices = distances.topk(k=1, dim=-1)
-	return distances, indices
-
-def knn(x, k):
-	inner = -2 * torch.matmul(x.transpose(2, 1).contiguous(), x)
-	xx = torch.sum(x ** 2, dim=1, keepdim=True)
-	pairwise_distance = -xx - inner - xx.transpose(2, 1).contiguous()
-
-	idx = pairwise_distance.topk(k=k, dim=-1)[1]  # (batch_size, num_points, k)
-	return idx
-
-def get_graph_feature(x, k=20):
-	# x = x.squeeze()
-	idx = knn(x, k=k)  # (batch_size, num_points, k)
-	batch_size, num_points, _ = idx.size()
-	device = torch.device('cuda')
-
-	idx_base = torch.arange(0, batch_size, device=device).view(-1, 1, 1) * num_points
-
-	idx = idx + idx_base
-
-	idx = idx.view(-1)
-
-	_, num_dims, _ = x.size()
-
-	x = x.transpose(2,
-					1).contiguous()  # (batch_size, num_points, num_dims)  -> (batch_size*num_points, num_dims) #   batch_size * num_points * k + range(0, batch_size*num_points)
-	feature = x.view(batch_size * num_points, -1)[idx, :]
-	feature = feature.view(batch_size, num_points, k, num_dims)
-	x = x.view(batch_size, num_points, 1, num_dims).repeat(1, 1, k, 1)
-
-	feature = torch.cat((feature, x), dim=3).permute(0, 3, 1, 2)
-
-	return feature
-
-
 class PointNet(nn.Module):
 	def __init__(self, emb_dims=512):
 		super(PointNet, self).__init__()
-		self.conv1 = nn.Conv1d(3, 64, kernel_size=1, bias=False)
-		self.conv2 = nn.Conv1d(64, 64, kernel_size=1, bias=False)
-		self.conv3 = nn.Conv1d(64, 64, kernel_size=1, bias=False)
-		self.conv4 = nn.Conv1d(64, 128, kernel_size=1, bias=False)
-		self.conv5 = nn.Conv1d(128, emb_dims, kernel_size=1, bias=False)
-		self.bn1 = nn.BatchNorm1d(64)
-		self.bn2 = nn.BatchNorm1d(64)
-		self.bn3 = nn.BatchNorm1d(64)
-		self.bn4 = nn.BatchNorm1d(128)
-		self.bn5 = nn.BatchNorm1d(emb_dims)
+		self.conv1 = nn.Conv1d(3, 64, kernel_size=1)
+		self.conv2 = nn.Conv1d(64, 64, kernel_size=1)
+		self.conv3 = nn.Conv1d(64, 64, kernel_size=1)
+		self.conv4 = nn.Conv1d(64, 128, kernel_size=1)
+		self.conv5 = nn.Conv1d(128, emb_dims, kernel_size=1)
 
 	def forward(self, x):
-		x = F.relu(self.bn1(self.conv1(x)))
-		x = F.relu(self.bn2(self.conv2(x)))
-		x = F.relu(self.bn3(self.conv3(x)))
-		x = F.relu(self.bn4(self.conv4(x)))
-		x = F.relu(self.bn5(self.conv5(x)))
+		x = F.relu(self.conv1(x))
+		x = F.relu(self.conv2(x))
+		x = F.relu(self.conv3(x))
+		x = F.relu(self.conv4(x))
+		x = F.relu(self.conv5(x))
 		return x
-
 
 class DGCNN(nn.Module):
 	def __init__(self, emb_dims=512):
@@ -120,32 +68,29 @@ class DGCNN(nn.Module):
 		x = F.relu(self.bn5(self.conv5(x))).view(batch_size, -1, num_points)
 		return x
 
-
 class MLPHead(nn.Module):
 	def __init__(self, args):
 		super(MLPHead, self).__init__()
 		emb_dims = args.emb_dims
 		self.emb_dims = emb_dims
 		self.nn = nn.Sequential(nn.Linear(emb_dims * 2, emb_dims // 2),
-								nn.BatchNorm1d(emb_dims // 2),
 								nn.ReLU(),
 								nn.Linear(emb_dims // 2, emb_dims // 4),
-								nn.BatchNorm1d(emb_dims // 4),
 								nn.ReLU(),
 								nn.Linear(emb_dims // 4, emb_dims // 8),
-								nn.BatchNorm1d(emb_dims // 8),
-								nn.ReLU())
-		self.proj_rot = nn.Linear(emb_dims // 8, 4)
-		self.proj_trans = nn.Linear(emb_dims // 8, 3)
+								nn.ReLU(),
+								nn.Dropout(p=0.7))
+		self.proj_rot = nn.Linear(emb_dims // 8, 7)
 
 	def forward(self, *input):
 		src_embedding = input[0]
 		tgt_embedding = input[1]
 		embedding = torch.cat((src_embedding, tgt_embedding), dim=1)
 		embedding = self.nn(embedding.max(dim=-1)[0])
-		rotation = self.proj_rot(embedding)
+		pose = self.proj_rot(embedding)
+		rotation = pose[:,3:7]
+		translation = pose[:,0:3]
 		rotation = rotation / torch.norm(rotation, p=2, dim=1, keepdim=True)
-		translation = self.proj_trans(embedding)
 		return quat2mat(rotation), translation
 
 
@@ -186,10 +131,6 @@ class PCRNet(nn.Module):
 		tgt = input[1]
 		src_embedding = self.emb_nn(src)
 		tgt_embedding = self.emb_nn(tgt)
-
-		# src_embedding_p, tgt_embedding_p = self.pointer(src_embedding, tgt_embedding)
-		# src_embedding = src_embedding + src_embedding_p
-		# tgt_embedding = tgt_embedding + tgt_embedding_p
 
 		if self.iterations > 1:
 			rotation_ab_temp, translation_ab_temp = self.head(src_embedding, tgt_embedding, src, tgt)

@@ -9,7 +9,6 @@ import h5py
 import numpy as np
 from scipy.spatial.transform import Rotation
 from torch.utils.data import Dataset
-import csv
 
 
 # Part of the code is referred from: https://github.com/charlesq34/pointnet
@@ -25,6 +24,24 @@ def download():
 		os.system('wget %s; unzip %s' % (www, zipfile))
 		os.system('mv %s %s' % (zipfile[:-4], DATA_DIR))
 		os.system('rm %s' % (zipfile))
+
+def download_data(file):
+	print_('################### Downloading Data ###################', color='g', style='bold')
+	from google_drive_downloader import GoogleDriveDownloader as gdd
+
+	if file=='train_data':
+		file_id = '16YU-tdayVNBwM3XlPDgFrrzlPjhQN3PB'
+	elif file=='car_data':
+		file_id = '1k9W75uhUFTfA_iK7YePGn5t9f4JhtgSe'
+
+	if not os.path.exists(os.path.join(os.getcwd(),'data',file)):
+		gdd.download_file_from_google_drive(file_id=file_id,
+										dest_path=os.path.join(os.getcwd(),'data',file+'.zip'),
+										showsize=True,
+										unzip=True)
+
+		os.remove(os.path.join(os.getcwd(),'data',file+'.zip'))
+	return True
 
 
 def load_data(partition):
@@ -44,11 +61,11 @@ def load_data(partition):
 	all_label = np.concatenate(all_label, axis=0)
 	return all_data, all_label
 
-def load_pcr_single(partition):
+def load_pcr_single(partition, idx=0):
 	train_len = 5070
 	test_len = 1024
-	f = h5py.File('./data/templates.h5')
-	data = f['templates'][0].astype('float32')[:1024]
+	f = h5py.File('./data/train_data/templates.h5')
+	data = f['templates'][idx].astype('float32')[:1024]
 	f.close()
 	if partition == 'train':
 		new_data = np.tile(data, [train_len, 1]).reshape(-1, 1024, 3)
@@ -57,7 +74,7 @@ def load_pcr_single(partition):
 	return new_data
 
 def load_pcr(partition):
-	f = h5py.File('./data/templates.h5')
+	f = h5py.File('./data/train_data/templates.h5')
 	data = f['templates'][:].astype('float32')
 	f.close()
 	if partition == 'test':
@@ -65,7 +82,8 @@ def load_pcr(partition):
 	return data
 
 def read_poses(filename):
-    with open(os.path.join('data',filename),'r') as csvfile:
+    import csv
+    with open(os.path.join('data/train_data',filename),'r') as csvfile:
         csvreader = csv.reader(csvfile)
         poses = []
         for row in csvreader:
@@ -158,6 +176,7 @@ class ModelNet40(Dataset):
 
 class pcr(Dataset):
 	def __init__(self, num_points, partition='train', gaussian_noise=True, unseen=False, factor=4):
+		assert download_data('train_data'), "Error in downloading the dataset!!"
 		self.data = load_pcr(partition)
 		if partition == 'train':
 			self.poses = read_poses('itr_net_train_data45.csv')[:len(self.data)]
@@ -167,16 +186,7 @@ class pcr(Dataset):
 		self.partition = partition
 		self.gaussian_noise = gaussian_noise
 		self.unseen = unseen
-		# self.label = self.label.squeeze()
 		self.factor = factor
-		# if self.unseen:
-		#     ######## simulate testing on first 20 categories while training on last 20 categories
-		#     if self.partition == 'test':
-		#         self.data = self.data[self.label>=20]
-		#         self.label = self.label[self.label>=20]
-		#     elif self.partition == 'train':
-		#         self.data = self.data[self.label<20]
-		#         self.label = self.label[self.label<20]
 
 	def __getitem__(self, item):
 		pointcloud = self.data[item][:self.num_points]
@@ -201,7 +211,7 @@ class pcr(Dataset):
 						[0, 0, 1]])
 		R_ab = Rx.dot(Ry).dot(Rz)
 		R_ba = R_ab.T
-		translation_ab = np.array([trans_x, trans_y, trans_z])
+		translation_ab = np.array([0.0, 0.0, 0.0])
 		translation_ba = -R_ba.T.dot(translation_ab)
 
 		pointcloud1 = pointcloud.T
@@ -215,8 +225,8 @@ class pcr(Dataset):
 		euler_ab = np.asarray([anglez, angley, anglex])
 		euler_ba = -euler_ab[::-1]
 
-		pointcloud1 = np.random.permutation(pointcloud1.T).T
-		pointcloud2 = np.random.permutation(pointcloud2.T).T
+		# pointcloud1 = np.random.permutation(pointcloud1.T).T
+		# pointcloud2 = np.random.permutation(pointcloud2.T).T
 
 		return pointcloud1.astype('float32'), pointcloud2.astype('float32'), R_ab.astype('float32'), \
 			   translation_ab.astype('float32'), R_ba.astype('float32'), translation_ba.astype('float32'), \
@@ -227,8 +237,9 @@ class pcr(Dataset):
 
 
 class pcr_single(Dataset):
-	def __init__(self, num_points, partition='train', gaussian_noise=True, unseen=False, factor=4):
-		self.data = load_pcr_single(partition)
+	def __init__(self, num_points, partition='train', gaussian_noise=False, unseen=False, factor=4):
+		assert download_data('car_data'), "Error in downloading the dataset!!"
+		self.data = load_pcr_single(partition, idx=2)
 		if partition == 'train':
 			self.poses = read_poses('itr_net_train_data45.csv')[:len(self.data)]
 		elif partition == 'test':
@@ -237,16 +248,7 @@ class pcr_single(Dataset):
 		self.partition = partition
 		self.gaussian_noise = gaussian_noise
 		self.unseen = unseen
-		# self.label = self.label.squeeze()
 		self.factor = factor
-		# if self.unseen:
-		#     ######## simulate testing on first 20 categories while training on last 20 categories
-		#     if self.partition == 'test':
-		#         self.data = self.data[self.label>=20]
-		#         self.label = self.label[self.label>=20]
-		#     elif self.partition == 'train':
-		#         self.data = self.data[self.label<20]
-		#         self.label = self.label[self.label<20]
 
 	def __getitem__(self, item):
 		pointcloud = self.data[item][:self.num_points]
@@ -285,8 +287,8 @@ class pcr_single(Dataset):
 		euler_ab = np.asarray([anglez, angley, anglex])
 		euler_ba = -euler_ab[::-1]
 
-		pointcloud1 = np.random.permutation(pointcloud1.T).T
-		pointcloud2 = np.random.permutation(pointcloud2.T).T
+		# pointcloud1 = np.random.permutation(pointcloud1.T).T
+		# pointcloud2 = np.random.permutation(pointcloud2.T).T
 
 		return pointcloud1.astype('float32'), pointcloud2.astype('float32'), R_ab.astype('float32'), \
 			   translation_ab.astype('float32'), R_ba.astype('float32'), translation_ba.astype('float32'), \
