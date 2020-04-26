@@ -47,8 +47,18 @@ def test_one_epoch(device, model, test_loader):
 		source = source.to(device)
 		igt = igt.to(device)
 
+		source_original = source.clone()
+		template_original = template.clone()
+		source = source - torch.mean(source, dim=1, keepdim=True)
+		template = template - torch.mean(template, dim=1, keepdim=True)
+
 		output = model(template, source)
-		display_open3d(template.detach().cpu().numpy()[0], source.detach().cpu().numpy()[0], output['transformed_source'].detach().cpu().numpy()[0])		
+		est_R = output['est_R']
+		est_t = output['est_t']
+
+		transformed_source = torch.bmm(est_R, source.permute(0, 2, 1)).permute(0,2,1) + est_t
+
+		display_open3d(template.detach().cpu().numpy()[0], source_original.detach().cpu().numpy()[0], transformed_source.detach().cpu().numpy()[0])
 		loss_val = ChamferDistanceLoss()(template, output['transformed_source'])
 
 		test_loss += loss_val.item()
@@ -86,7 +96,7 @@ def options():
 						metavar='N', help='number of data loading workers (default: 4)')
 	parser.add_argument('-b', '--batch_size', default=20, type=int,
 						metavar='N', help='mini-batch size (default: 32)')
-	parser.add_argument('--pretrained', default='learning3d/pretrained/exp_ipcrnet/models/best_model.t7', type=str,
+	parser.add_argument('--pretrained', default='pcrnet/pretrained/exp_ipcrnet/models/best_model.t7', type=str,
 						metavar='PATH', help='path to pretrained model file (default: null (no-use))')
 	parser.add_argument('--device', default='cuda:0', type=str,
 						metavar='DEVICE', help='use CUDA if available')

@@ -57,6 +57,10 @@ def test_one_epoch(device, model, test_loader):
 		source = source.to(device)
 		igt = igt.to(device)
 
+		# mean substraction
+		source = source - torch.mean(source, dim=1, keepdim=True)
+		template = template - torch.mean(template, dim=1, keepdim=True)
+
 		output = model(template, source)
 		loss_val = ChamferDistanceLoss()(template, output['transformed_source'])
 
@@ -81,6 +85,10 @@ def train_one_epoch(device, model, train_loader, optimizer):
 		template = template.to(device)
 		source = source.to(device)
 		igt = igt.to(device)
+
+		# mean substraction
+		source = source - torch.mean(source, dim=1, keepdim=True)
+		template = template - torch.mean(template, dim=1, keepdim=True)
 
 		output = model(template, source)
 		loss_val = ChamferDistanceLoss()(template, output['transformed_source'])
@@ -138,8 +146,6 @@ def options():
 	parser = argparse.ArgumentParser(description='Point Cloud Registration')
 	parser.add_argument('--exp_name', type=str, default='exp_ipcrnet', metavar='N',
 						help='Name of the experiment')
-	parser.add_argument('--dataset_path', type=str, default='ModelNet40',
-						metavar='PATH', help='path to the input dataset') # like '/path/to/ModelNet40'
 	parser.add_argument('--eval', type=bool, default=False, help='Train or Evaluate the network.')
 
 	# settings for input data
