@@ -199,8 +199,8 @@ def main():
 	textio.cprint(str(args))
 
 	
-	trainset = RegistrationData('PCRNet', ModelNet40Data(train=True))
-	testset = RegistrationData('PCRNet', ModelNet40Data(train=False))
+	trainset = RegistrationData('PCRNet', ModelNet40Data(train=True, download=True))
+	testset = RegistrationData('PCRNet', ModelNet40Data(train=False, download=True))
 	train_loader = DataLoader(trainset, batch_size=args.batch_size, shuffle=True, drop_last=True, num_workers=args.workers)
 	test_loader = DataLoader(testset, batch_size=args.batch_size, shuffle=False, drop_last=False, num_workers=args.workers)
 

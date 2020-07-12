@@ -16,7 +16,7 @@ Source Code Author: Vinit Sarode
 ### How to use code:
 
 #### Train Iterative-PCRNet:
-python train.py
+python train_pcrnet.py
 
 ### Citation
 
