@@ -71,8 +71,8 @@ def test_one_epoch(device, model, test_loader):
 	return test_loss
 
 def test(args, model, test_loader, textio):
-	test_loss, test_accuracy = test_one_epoch(args.device, model, test_loader)
-	textio.cprint('Validation Loss: %f & Validation Accuracy: %f'%(test_loss, test_accuracy))
+	test_loss = test_one_epoch(args.device, model, test_loader)
+	textio.cprint('Validation Loss: %f'%(test_loss))
 
 def train_one_epoch(device, model, train_loader, optimizer):
 	model.train()

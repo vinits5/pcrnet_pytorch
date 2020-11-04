@@ -17,8 +17,9 @@ def download_modelnet40():
 	if not os.path.exists(DATA_DIR):
 		os.mkdir(DATA_DIR)
 	if not os.path.exists(os.path.join(DATA_DIR, 'modelnet40_ply_hdf5_2048')):
-		www = '--no-check-certificate https://shapenet.cs.stanford.edu/media/modelnet40_ply_hdf5_2048.zip'
+		www = 'https://shapenet.cs.stanford.edu/media/modelnet40_ply_hdf5_2048.zip'
 		zipfile = os.path.basename(www)
+		www += ' --no-check-certificate'
 		os.system('wget %s; unzip %s' % (www, zipfile))
 		os.system('mv %s %s' % (zipfile[:-4], DATA_DIR))
 		os.system('rm %s' % (zipfile))
@@ -98,9 +99,10 @@ class ModelNet40Data(Dataset):
 		return shape_names
 
 class RegistrationData(Dataset):
-	def __init__(self, algorithm, data_class=ModelNet40Data()):
+	def __init__(self, algorithm, data_class=ModelNet40Data(), is_testing=False):
 		super(RegistrationData, self).__init__()
 		self.algorithm = 'iPCRNet'
+		self.is_testing = is_testing
 		
 		self.set_class(data_class)
 		if self.algorithm == 'PCRNet' or self.algorithm == 'iPCRNet':
@@ -118,4 +120,7 @@ class RegistrationData(Dataset):
 		self.transforms.index = index				# for fixed transformations in PCRNet.
 		source = self.transforms(template)
 		igt = self.transforms.igt
-		return template, source, igt
+		if self.is_testing:
+			return template, source, igt, self.transforms.igt_rotation, self.transforms.igt_translation
+		else:
+			return template, source, igt

@@ -176,6 +176,8 @@ class PCRNetTransform:
 
     def __call__(self, template):
         self.igt = self.transformations[self.index]
-        gt = self.create_pose_7d(self.igt)
-        source = self.quaternion_rotate(template, gt) + self.get_translation(gt)
+        igt = self.create_pose_7d(self.igt)
+        self.igt_rotation = self.quaternion_rotate(torch.eye(3), igt).permute(1, 0)        # [3x3]
+        self.igt_translation = self.get_translation(igt)                                   # [1x3]
+        source = self.quaternion_rotate(template, igt) + self.get_translation(igt)
         return source
