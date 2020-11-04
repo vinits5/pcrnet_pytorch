@@ -66,7 +66,6 @@ def test_one_epoch(device, model, test_loader):
 	errors = []
 
 	for i, data in enumerate(tqdm(test_loader)):
-		if i > 2: break
 		template, source, igt, igt_R, igt_t = data
 
 		template = template.to(device)
