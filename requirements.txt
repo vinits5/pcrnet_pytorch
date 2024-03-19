@@ -1,0 +1,9 @@
+torch==1.4.0
+transforms3d==0.3.1
+h5py==2.9.0
+numpy==1.24.3
+tqdm==4.65.0
+tensorboardX==2.6
+open3d==0.17.0
+scikit-learn==1.2.2
+scipy==1.10.1
