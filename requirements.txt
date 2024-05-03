@@ -2,7 +2,7 @@ torch==2.0.1
 transforms3d==0.4.1
 h5py==3.8.0
 numpy==1.24.3
-tqdm==4.65.0
+tqdm==4.66.3
 tensorboardX==2.6
 open3d==0.17.0
 scikit-learn==1.2.2
